@@ -1,106 +1,88 @@
 from pathlib import Path
+from math import atan2, cos, sin, pi
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.units import cm
 from reportlab.pdfbase.pdfmetrics import stringWidth
-from reportlab.platypus import Paragraph
 from reportlab.pdfgen import canvas
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "14-diagrammi-completi.pdf"
-
 PAGE_W, PAGE_H = landscape(A4)
-MARGIN = 1.25 * cm
-BLUE = colors.HexColor("#134a73")
-CYAN = colors.HexColor("#24b7c5")
-LIGHT = colors.HexColor("#edf6fb")
-MID = colors.HexColor("#b9d3e5")
-DARK = colors.HexColor("#1f2d3d")
-GREEN = colors.HexColor("#2c7a4b")
-ORANGE = colors.HexColor("#c46a20")
-PURPLE = colors.HexColor("#6157a6")
 
-styles = getSampleStyleSheet()
-styles.add(ParagraphStyle(name="Small", fontName="Helvetica", fontSize=8.5, leading=10.5, textColor=DARK))
-styles.add(ParagraphStyle(name="Tiny", fontName="Helvetica", fontSize=7.3, leading=8.8, textColor=DARK))
+PURPLE = colors.HexColor("#8b6cf0")
+BOX_FILL = colors.HexColor("#ededff")
+GROUP_FILL = colors.HexColor("#ffffdf")
+GROUP_STROKE = colors.HexColor("#b8b83f")
+BLACK = colors.HexColor("#222222")
+GRAY = colors.HexColor("#777777")
 
 
-def header(c, title, page):
-    c.setFillColor(LIGHT)
-    c.setStrokeColor(MID)
-    c.roundRect(MARGIN, PAGE_H - 1.55 * cm, PAGE_W - 2 * MARGIN, 0.75 * cm, 6, fill=1, stroke=1)
-    c.setFillColor(BLUE)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(MARGIN + 0.35 * cm, PAGE_H - 1.08 * cm, "PLAYCONNECT")
-    c.setFillColor(DARK)
-    c.setFont("Helvetica", 10.5)
-    c.drawRightString(PAGE_W - MARGIN - 0.35 * cm, PAGE_H - 1.08 * cm, "Documentazione tecnica PISSIR - A.A. 2025/2026")
-    c.setFillColor(BLUE)
-    c.setFont("Helvetica-Bold", 22)
-    c.drawString(MARGIN, PAGE_H - 2.55 * cm, title)
-    c.setStrokeColor(CYAN)
-    c.setLineWidth(2)
-    c.line(MARGIN, PAGE_H - 2.85 * cm, PAGE_W - MARGIN, PAGE_H - 2.85 * cm)
-    c.setFillColor(colors.HexColor("#56616d"))
-    c.setFont("Helvetica", 8)
-    c.drawString(MARGIN, 0.75 * cm, "PlayConnect - Diagrammi completi")
-    c.drawRightString(PAGE_W - MARGIN, 0.75 * cm, f"{page}")
+def fit(text, font="Helvetica", max_size=12, width=100):
+    size = max_size
+    while size > 5 and stringWidth(text, font, size) > width:
+        size -= 0.5
+    return size
 
 
-def wrap_text(text, width, font="Helvetica", size=8):
-    words = text.split()
-    lines = []
-    line = ""
-    for word in words:
-        trial = f"{line} {word}".strip()
+def lines(text, width, font="Helvetica", size=10):
+    out, cur = [], ""
+    for word in text.split():
+        trial = f"{cur} {word}".strip()
         if stringWidth(trial, font, size) <= width:
-            line = trial
+            cur = trial
         else:
-            if line:
-                lines.append(line)
-            line = word
-    if line:
-        lines.append(line)
-    return lines
+            if cur:
+                out.append(cur)
+            cur = word
+    if cur:
+        out.append(cur)
+    return out
 
 
-def box(c, x, y, w, h, title, body=None, fill=LIGHT, stroke=MID, title_color=BLUE, size=8.5):
+def box(c, x, y, w, h, text, size=11, bold=False, fill=BOX_FILL, stroke=PURPLE):
     c.setFillColor(fill)
     c.setStrokeColor(stroke)
-    c.setLineWidth(1)
-    c.roundRect(x, y, w, h, 5, fill=1, stroke=1)
-    c.setFillColor(title_color)
-    c.setFont("Helvetica-Bold", size)
-    title_lines = wrap_text(title, w - 0.35 * cm, "Helvetica-Bold", size)
-    ty = y + h - 0.38 * cm
-    for line in title_lines[:2]:
-        c.drawString(x + 0.18 * cm, ty, line)
-        ty -= 0.32 * cm
-    if body:
-        c.setFillColor(DARK)
-        c.setFont("Helvetica", size - 1)
-        by = ty - 0.08 * cm
-        for line in wrap_text(body, w - 0.35 * cm, "Helvetica", size - 1)[:5]:
-            c.drawString(x + 0.18 * cm, by, line)
-            by -= 0.27 * cm
+    c.setLineWidth(0.8)
+    c.roundRect(x, y, w, h, 3, fill=1, stroke=1)
+    font = "Helvetica-Bold" if bold else "Helvetica"
+    c.setFillColor(colors.black)
+    c.setFont(font, fit(text, font, size, w - 0.35 * cm))
+    ll = lines(text, w - 0.35 * cm, font, size)
+    total = len(ll) * size * 1.25
+    yy = y + h / 2 + total / 2 - size
+    for line in ll:
+        c.drawCentredString(x + w / 2, yy, line)
+        yy -= size * 1.25
 
 
-def arrow(c, x1, y1, x2, y2, label=None, color=DARK):
+def group(c, x, y, w, h, title):
+    c.setFillColor(GROUP_FILL)
+    c.setStrokeColor(GROUP_STROKE)
+    c.setLineWidth(0.8)
+    c.rect(x, y, w, h, fill=1, stroke=1)
+    c.setFillColor(BLACK)
+    c.setFont("Helvetica", 13)
+    c.drawCentredString(x + w / 2, y + h - 0.35 * cm, title)
+
+
+def arrow(c, x1, y1, x2, y2, label="", dashed=False, color=BLACK):
     c.setStrokeColor(color)
     c.setFillColor(color)
-    c.setLineWidth(1.1)
+    c.setLineWidth(0.8)
+    if dashed:
+        c.setDash(3, 3)
     c.line(x1, y1, x2, y2)
-    dx = x2 - x1
-    dy = y2 - y1
-    if abs(dx) >= abs(dy):
-        sign = 1 if dx >= 0 else -1
-        pts = [(x2, y2), (x2 - sign * 7, y2 + 4), (x2 - sign * 7, y2 - 4)]
-    else:
-        sign = 1 if dy >= 0 else -1
-        pts = [(x2, y2), (x2 - 4, y2 - sign * 7), (x2 + 4, y2 - sign * 7)]
+    c.setDash()
+    ang = atan2(y2 - y1, x2 - x1)
+    size = 6
+    pts = [
+        (x2, y2),
+        (x2 - size * cos(ang - pi / 7), y2 - size * sin(ang - pi / 7)),
+        (x2 - size * cos(ang + pi / 7), y2 - size * sin(ang + pi / 7)),
+    ]
     p = c.beginPath()
     p.moveTo(*pts[0])
     p.lineTo(*pts[1])
@@ -108,319 +90,287 @@ def arrow(c, x1, y1, x2, y2, label=None, color=DARK):
     p.close()
     c.drawPath(p, fill=1, stroke=0)
     if label:
-        c.setFont("Helvetica", 7)
-        c.setFillColor(color)
-        c.drawCentredString((x1 + x2) / 2, (y1 + y2) / 2 + 0.12 * cm, label)
+        c.setFillColor(BLACK)
+        c.setFont("Helvetica", 9)
+        c.drawCentredString((x1 + x2) / 2, (y1 + y2) / 2 + 0.13 * cm, label)
 
 
-def page_index(c):
-    header(c, "Diagrammi completi", "1 / 11")
-    y = PAGE_H - 4.0 * cm
-    items = [
-        "1. Casi d'uso",
-        "2. Diagramma del dominio",
-        "3. Diagramma dei package",
-        "4. Classi e moduli di implementazione",
-        "5. Microservizi: input, output e logica",
-        "6. Sequenza login",
-        "7. Sequenza partita MQTT",
-        "8. Sequenza offline e sincronizzazione",
-        "9. Sequenza torneo",
-        "10. Deployment Docker",
-    ]
-    c.setFillColor(DARK)
-    c.setFont("Helvetica", 13)
-    c.drawString(MARGIN, y, "Versione grafica renderizzata dei diagrammi del progetto.")
-    y -= 0.75 * cm
-    c.setFillColor(colors.HexColor("#f7fafc"))
-    c.setStrokeColor(MID)
-    c.roundRect(MARGIN, y - 6.0 * cm, PAGE_W - 2 * MARGIN, 6.3 * cm, 6, fill=1, stroke=1)
-    c.setFillColor(BLUE)
-    c.setFont("Helvetica-Bold", 15)
-    c.drawString(MARGIN + 0.5 * cm, y - 0.2 * cm, "Indice")
-    c.setFillColor(DARK)
-    c.setFont("Helvetica", 11)
-    for i, item in enumerate(items):
-        c.drawString(MARGIN + 0.8 * cm, y - (0.9 + i * 0.48) * cm, item)
-    c.setFillColor(colors.HexColor("#56616d"))
-    c.setFont("Helvetica", 9)
-    c.drawString(MARGIN, 2.5 * cm, "Il file docs/03-diagrammi.pdf conserva la versione testuale Mermaid.")
-    c.drawString(MARGIN, 2.1 * cm, "Questo documento e pensato per la relazione e la discussione orale.")
+def class_box(c, x, y, w, h, title, body):
+    c.setFillColor(BOX_FILL)
+    c.setStrokeColor(PURPLE)
+    c.setLineWidth(0.8)
+    c.rect(x, y, w, h, fill=1, stroke=1)
+    c.line(x, y + h - 0.45 * cm, x + w, y + h - 0.45 * cm)
+    c.line(x, y + h - 0.95 * cm, x + w, y + h - 0.95 * cm)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 7.3)
+    c.drawCentredString(x + w / 2, y + h - 0.30 * cm, title)
+    c.setFont("Helvetica", 6.5)
+    c.drawString(x + 0.12 * cm, y + 0.30 * cm, body)
 
 
-def page_use_cases(c):
-    header(c, "1. Casi d'uso", "2 / 11")
-    actors = [
-        ("Giocatore", ["Vedere giochi", "Vedere partite", "Statistiche", "Tornei"]),
-        ("Admin locale", ["Giochi locale", "Edge e sensori", "Attuatori", "Squadre", "Partite"]),
-        ("Admin gioco", ["Tipi di gioco", "Regole eventi", "Modelli sensore"]),
-        ("Admin piattaforma", ["Locali", "Utenti", "Tornei", "Statistiche globali"]),
-    ]
-    left = MARGIN
-    top = PAGE_H - 4.2 * cm
-    actor_w = 4.2 * cm
-    use_w = 4.6 * cm
-    colors_by = [GREEN, ORANGE, PURPLE, BLUE]
-    for idx, (actor, cases) in enumerate(actors):
-        y = top - idx * 3.25 * cm
-        box(c, left, y, actor_w, 1.05 * cm, actor, fill=colors.HexColor("#f8fbfd"), stroke=colors_by[idx], title_color=colors_by[idx], size=9)
-        for j, use_case in enumerate(cases):
-            x = left + actor_w + 1.1 * cm + (j % 3) * (use_w + 0.8 * cm)
-            yy = y + (0.35 if j < 3 else -0.65) * cm
-            box(c, x, yy, use_w, 0.82 * cm, use_case, fill=colors.white, stroke=MID, title_color=DARK, size=8)
-            arrow(c, left + actor_w, y + 0.52 * cm, x, yy + 0.41 * cm, color=colors_by[idx])
-
-
-def page_domain(c):
-    header(c, "2. Diagramma del dominio", "3 / 11")
-    nodes = [
-        ("Locale", "name, city, address", 1, 3),
-        ("User", "username, role, locale_id", 0, 2),
-        ("Game", "name, type, status", 2, 2),
-        ("GameType", "rules, score_limit", 3, 3),
-        ("SensorTemplate", "event_type", 4, 2),
-        ("EdgeDevice", "status, last_sync", 1, 1),
-        ("Sensor", "sensor_type, topic", 2, 0),
-        ("Actuator", "type, state, topic", 3, 0),
-        ("Match", "scores, status", 4, 1),
-        ("MatchEvent", "uuid, sync_status", 5, 0),
-        ("Tournament", "game_type, mode", 5, 3),
-        ("Team", "name, locale_id", 0, 0),
-    ]
-    x0, y0 = MARGIN, 3.15 * cm
-    bw, bh = 4.0 * cm, 1.3 * cm
-    gapx, gapy = 0.45 * cm, 1.25 * cm
-    pos = {}
-    for name, body, col, row in nodes:
-        x = x0 + col * (bw + gapx)
-        y = y0 + row * (bh + gapy)
-        pos[name] = (x, y)
-        box(c, x, y, bw, bh, name, body, fill=colors.white, stroke=MID, size=8)
-    rels = [
-        ("Locale", "User", "1..*"), ("Locale", "Game", "1..*"), ("Locale", "EdgeDevice", "1..*"),
-        ("Locale", "Team", "1..*"), ("GameType", "Game", "1..*"), ("GameType", "SensorTemplate", "1..*"),
-        ("EdgeDevice", "Sensor", "1..*"), ("EdgeDevice", "Actuator", "1..*"), ("Game", "Match", "1..*"),
-        ("Match", "MatchEvent", "1..*"), ("Tournament", "Match", "matches"), ("Tournament", "Team", "teams"),
-    ]
-    for a, b, lab in rels:
-        ax, ay = pos[a]
-        bx, by = pos[b]
-        arrow(c, ax + bw / 2, ay + bh / 2, bx + bw / 2, by + bh / 2, lab, color=colors.HexColor("#5a6b7c"))
-
-
-def page_packages(c):
-    header(c, "3. Diagramma dei package", "4 / 11")
-    packages = [
-        ("Frontend", "HTML pages\nBrowser JS\nCSS", MARGIN, 12.3 * cm, 5.1 * cm, 2.3 * cm, BLUE),
-        ("API Gateway", "Routing REST\nHealth check", 7.0 * cm, 12.3 * cm, 5.0 * cm, 2.3 * cm, PURPLE),
-        ("Backend services", "Routes\nMiddleware\nControllers\nServices\nRules/Utils", 13.2 * cm, 11.5 * cm, 6.2 * cm, 3.1 * cm, GREEN),
-        ("Database", "db.js\nMySQL schema", 21.0 * cm, 12.3 * cm, 4.8 * cm, 2.3 * cm, ORANGE),
-        ("Edge Service", "API locale\nCoda JSON\nMQTT client\nUI locale", 7.0 * cm, 6.3 * cm, 5.6 * cm, 3.0 * cm, BLUE),
-        ("MQTT Broker", "Eventi sensori\nComandi attuatori\nHeartbeat", 14.5 * cm, 6.8 * cm, 5.8 * cm, 2.5 * cm, PURPLE),
-    ]
-    for title, body, x, y, w, h, col in packages:
-        box(c, x, y, w, h, title, body.replace("\n", " - "), fill=colors.white, stroke=col, title_color=col, size=9)
-    arrow(c, 6.1 * cm, 13.45 * cm, 7.0 * cm, 13.45 * cm, "REST")
-    arrow(c, 12.0 * cm, 13.45 * cm, 13.2 * cm, 13.45 * cm, "forward")
-    arrow(c, 19.4 * cm, 13.45 * cm, 21.0 * cm, 13.45 * cm, "SQL")
-    arrow(c, 12.6 * cm, 7.75 * cm, 14.5 * cm, 7.95 * cm, "publish")
-    arrow(c, 18.2 * cm, 9.3 * cm, 17.0 * cm, 11.5 * cm, "subscribe")
-    arrow(c, 16.0 * cm, 11.5 * cm, 16.8 * cm, 9.3 * cm, "commands")
-
-
-def page_modules(c):
-    header(c, "4. Classi e moduli di implementazione", "5 / 11")
-    cols = [
-        ("Gateway", ["server.js", "serviceFor(path)", "forward request", "health"]),
-        ("Catalog", ["authController", "userController", "localeController", "gameController", "deviceController"]),
-        ("Match", ["matchController", "matchEventService", "actuatorService", "mqttClient"]),
-        ("Tournament", ["tournamentController", "tournamentService", "tournamentRules", "statsController"]),
-        ("Edge", ["simulator.js", "publishOrQueue", "syncQueue", "offline-queue.json"]),
-    ]
-    x = MARGIN
-    w = (PAGE_W - 2 * MARGIN - 4 * 0.45 * cm) / 5
-    for idx, (title, lines) in enumerate(cols):
-        xx = x + idx * (w + 0.45 * cm)
-        box(c, xx, 5.0 * cm, w, 9.7 * cm, title, fill=colors.white, stroke=[PURPLE, GREEN, GREEN, GREEN, BLUE][idx], title_color=[PURPLE, GREEN, GREEN, GREEN, BLUE][idx], size=10)
-        c.setFont("Helvetica", 8.2)
-        c.setFillColor(DARK)
-        yy = 13.7 * cm
-        for line in lines:
-            c.drawString(xx + 0.25 * cm, yy, f"- {line}")
-            yy -= 0.55 * cm
-    arrow(c, MARGIN + w, 10.0 * cm, MARGIN + w + 0.45 * cm, 10.0 * cm, "REST")
-    arrow(c, MARGIN + 2 * (w + 0.45 * cm) + w, 10.0 * cm, MARGIN + 3 * (w + 0.45 * cm), 10.0 * cm, "ranking")
-    arrow(c, MARGIN + 4 * (w + 0.45 * cm), 8.0 * cm, MARGIN + 2 * (w + 0.45 * cm) + w, 8.0 * cm, "MQTT")
-
-
-def page_microservices(c):
-    header(c, "5. Microservizi: input, output e logica", "6 / 11")
-    rows = [
-        ("Catalog Service", "Input: auth, users, locales, games, game-types, devices", "Output: configurazione e inventario", "Logica: ruoli, ownership locale, sensori e attuatori"),
-        ("Match Service", "Input: REST matches + eventi MQTT", "Output: match, eventi, punteggi, comandi attuatori", "Logica: UUID, deduplicazione, score, fine partita"),
-        ("Tournament Service", "Input: tournaments, teams, statistics", "Output: calendario, ranking, statistiche", "Logica: compatibilita tipo/modalita/locale, classifica"),
-        ("Edge Service", "Input: sensori simulati e comandi", "Output: MQTT QoS 1, coda offline, UI locale", "Logica: publishOrQueue, syncQueue, heartbeat"),
-    ]
-    y = 13.6 * cm
-    for idx, (name, inp, out, logic) in enumerate(rows):
-        col = [GREEN, BLUE, PURPLE, ORANGE][idx]
-        box(c, MARGIN, y - 1.55 * cm, 5.4 * cm, 1.3 * cm, name, fill=colors.white, stroke=col, title_color=col, size=9)
-        box(c, 7.4 * cm, y - 1.55 * cm, 5.6 * cm, 1.3 * cm, inp, fill=colors.HexColor("#fbfdff"), stroke=MID, title_color=DARK, size=7.5)
-        box(c, 14.1 * cm, y - 1.55 * cm, 5.6 * cm, 1.3 * cm, out, fill=colors.HexColor("#fbfdff"), stroke=MID, title_color=DARK, size=7.5)
-        box(c, 20.8 * cm, y - 1.55 * cm, 6.2 * cm, 1.3 * cm, logic, fill=colors.HexColor("#fbfdff"), stroke=MID, title_color=DARK, size=7.5)
-        arrow(c, 6.4 * cm, y - 0.9 * cm, 7.4 * cm, y - 0.9 * cm, color=col)
-        arrow(c, 13.0 * cm, y - 0.9 * cm, 14.1 * cm, y - 0.9 * cm, color=col)
-        arrow(c, 19.7 * cm, y - 0.9 * cm, 20.8 * cm, y - 0.9 * cm, color=col)
-        y -= 2.7 * cm
-
-
-def sequence_page(c, title, page, participants, messages):
-    header(c, title, page)
-    x0 = MARGIN + 0.4 * cm
-    usable = PAGE_W - 2 * MARGIN - 0.8 * cm
-    top = 13.6 * cm
-    bottom = 2.0 * cm
-    spacing = usable / (len(participants) - 1)
+def lifelines(c, names, top=15.0 * cm, bottom=1.8 * cm):
+    margin = 1.65 * cm
+    step = (PAGE_W - 2 * margin) / (len(names) - 1)
     xs = []
-    for i, p in enumerate(participants):
-        x = x0 + i * spacing
+    for i, name in enumerate(names):
+        x = margin + i * step
         xs.append(x)
-        box(c, x - 1.25 * cm, top, 2.5 * cm, 0.8 * cm, p, fill=colors.white, stroke=BLUE, size=7.5)
-        c.setStrokeColor(colors.HexColor("#aab7c4"))
-        c.setDash(3, 3)
+        box(c, x - 1.25 * cm, top, 2.5 * cm, 0.85 * cm, name, 10)
+        box(c, x - 1.25 * cm, bottom - 0.6 * cm, 2.5 * cm, 0.85 * cm, name, 10)
+        c.setStrokeColor(PURPLE)
+        c.setLineWidth(1.0)
         c.line(x, top, x, bottom)
-        c.setDash()
-    y = top - 1.0 * cm
-    c.setFont("Helvetica", 7.4)
-    for src, dst, label, col in messages:
-        x1, x2 = xs[src], xs[dst]
-        arrow(c, x1, y, x2, y, color=col)
-        c.setFillColor(DARK)
-        c.drawCentredString((x1 + x2) / 2, y + 0.16 * cm, label)
+    return xs
+
+
+def msg(c, xs, src, dst, y, label, dashed=False):
+    arrow(c, xs[src], y, xs[dst], y, label, dashed=dashed)
+
+
+def page_header(c, title):
+    c.setFillColor(BLACK)
+    c.setFont("Helvetica", 14)
+    c.drawCentredString(PAGE_W / 2, PAGE_H - 0.65 * cm, title)
+
+
+def page_1_architecture(c):
+    group(c, 0.2 * cm, 11.8 * cm, 16.4 * cm, 3.8 * cm, "Edge")
+    box(c, 0.9 * cm, 13.25 * cm, 4.1 * cm, 0.9 * cm, "Interfaccia locale")
+    box(c, 6.6 * cm, 13.25 * cm, 4.3 * cm, 0.9 * cm, "Express API locale")
+    box(c, 12.6 * cm, 14.1 * cm, 3.1 * cm, 0.9 * cm, "Coda JSON")
+    box(c, 12.5 * cm, 12.4 * cm, 3.3 * cm, 0.9 * cm, "Client MQTT")
+    arrow(c, 5.0 * cm, 13.7 * cm, 6.6 * cm, 13.7 * cm)
+    arrow(c, 10.9 * cm, 13.85 * cm, 12.6 * cm, 14.55 * cm)
+    arrow(c, 10.9 * cm, 13.4 * cm, 12.5 * cm, 12.85 * cm)
+
+    group(c, 17.3 * cm, 9.6 * cm, 9.1 * cm, 6.9 * cm, "Frontend")
+    box(c, 18.5 * cm, 13.25 * cm, 3.4 * cm, 0.9 * cm, "Pagine HTML")
+    box(c, 18.0 * cm, 10.6 * cm, 4.4 * cm, 0.9 * cm, "JavaScript browser")
+    box(c, 23.4 * cm, 10.6 * cm, 1.9 * cm, 0.9 * cm, "CSS")
+    arrow(c, 20.2 * cm, 13.25 * cm, 20.2 * cm, 11.5 * cm)
+
+    group(c, 16.8 * cm, 6.8 * cm, 6.9 * cm, 2.1 * cm, "Gateway")
+    box(c, 17.55 * cm, 7.25 * cm, 5.4 * cm, 1.1 * cm, "server.js - instradamento")
+    group(c, 16.9 * cm, 0.25 * cm, 8.0 * cm, 5.45 * cm, "Backend")
+    backend_y = [4.55, 3.55, 2.55, 1.55]
+    for i, name in enumerate(["Routes", "Middleware", "Controllers", "Services"]):
+        box(c, 19.0 * cm, backend_y[i] * cm, 2.4 * cm, 0.72 * cm, name)
+        if i:
+            arrow(c, 20.2 * cm, backend_y[i - 1] * cm, 20.2 * cm, (backend_y[i] + 0.72) * cm)
+    box(c, 17.75 * cm, 0.55 * cm, 3.0 * cm, 0.72 * cm, "Utils/Rules")
+    box(c, 22.1 * cm, 0.55 * cm, 2.1 * cm, 0.72 * cm, "db.js")
+    arrow(c, 20.2 * cm, 6.8 * cm, 20.2 * cm, 5.7 * cm)
+
+
+def page_2_use_cases(c):
+    actors = [
+        ("Admin piattaforma", ["Gestire locali", "Gestire utenti", "Creare tornei", "Scegliere locali e squadre", "Vedere statistiche globali"], 0.5, 3.1),
+        ("Admin gioco", ["Definire tipi di gioco", "Definire regole eventi", "Definire modelli sensore"], 7.7, 6.1),
+        ("Admin locale", ["Gestire giochi del locale", "Gestire edge e sensori", "Gestire attuatori", "Creare squadre", "Avviare partite", "Vedere statistiche locali"], 14.3, 4.6),
+        ("Giocatore", ["Vedere giochi", "Vedere proprie partite", "Vedere statistiche", "Vedere tornei"], 21.0, 5.5),
+    ]
+    for actor, cases, xcm, ycm in actors:
+        x, y = xcm * cm, ycm * cm
+        box(c, x, y, 2.3 * cm, 0.75 * cm, actor, 8)
+        for i, uc in enumerate(cases):
+            yy = y + (len(cases) - 1) * 0.55 * cm / 2 - i * 0.9 * cm
+            xx = x + 3.5 * cm
+            box(c, xx, yy, 3.2 * cm, 0.65 * cm, uc, 6.8)
+            arrow(c, x + 2.3 * cm, y + 0.37 * cm, xx, yy + 0.32 * cm)
+
+
+def page_3_domain(c):
+    items = {
+        "Tournament": (10.3, 14.2, 4.5, 1.25, "id name game_type participant_mode status"),
+        "Locale": (1.7, 10.8, 2.3, 1.25, ""),
+        "GameType": (13.0, 11.0, 4.7, 1.25, "id name description score_limit supports_teams"),
+        "User": (23.4, 9.2, 3.5, 1.25, "id username password role locale_id"),
+        "EdgeDevice": (0.2, 7.2, 3.8, 1.25, "id name status last_seen last_sync"),
+        "Game": (4.4, 7.2, 4.1, 1.25, "id name type status locale_id game_type_id"),
+        "SensorTemplate": (18.7, 7.2, 3.6, 1.25, "id name event_type description"),
+        "Team": (16.5, 6.7, 2.4, 1.25, "id name locale_id"),
+        "Sensor": (0.1, 4.6, 3.8, 1.25, "id name sensor_type mqtt_topic status"),
+        "Actuator": (4.35, 4.6, 3.9, 1.25, "id name actuator_type state mqtt_topic"),
+        "Match": (8.8, 4.6, 6.4, 1.25, "id participant_mode player1_name player2_name score1 score2 status"),
+        "TeamMember": (20.3, 4.8, 1.5, 0.9, ""),
+        "MatchEvent": (9.55, 2.1, 4.8, 1.25, "id event_uuid event_type sync_status created_at"),
+    }
+    center = {}
+    for name, (x, y, w, h, body) in items.items():
+        class_box(c, x * cm, y * cm, w * cm, h * cm, name, body)
+        center[name] = ((x + w / 2) * cm, (y + h / 2) * cm)
+    rels = [("Tournament","Locale"),("Tournament","GameType"),("Tournament","Team"),("Locale","EdgeDevice"),("Locale","Game"),("Locale","Team"),("GameType","Game"),("GameType","SensorTemplate"),("EdgeDevice","Sensor"),("Game","Sensor"),("Game","Actuator"),("Game","Match"),("Match","MatchEvent"),("User","TeamMember"),("Team","TeamMember"),("Tournament","Match")]
+    for a, b in rels:
+        arrow(c, *center[a], *center[b], color=GRAY)
+
+
+def page_4_modules(c):
+    modules = [
+        ("ApiGateway", "serviceFor(path) forwardRequest() health()", 7.2, 14.7, 3.9),
+        ("UserController", "getUsers() createClient() createLocalAdmin() createGameAdmin()", 11.6, 14.7, 5.7),
+        ("DeviceController", "getDevices() createSensor() createActuator()", 17.7, 14.7, 4.3),
+        ("EdgeService", "publishOrQueue() syncQueue() simulate()", 22.4, 14.7, 4.4),
+        ("GameTypeController", "getGameTypes() createGameType() createSensorTemplate()", 4.65, 12.8, 5.5),
+        ("MatchController", "startMatch() addMatchEvent() simulateMatchMqtt()", 12.6, 12.8, 4.7),
+        ("AuthController", "login()", 17.8, 12.8, 1.45),
+        ("TournamentController", "createTournament() addMatchToTournament()", 0.55, 10.4, 4.5),
+        ("ValidationRules", "validateGameTypeInput() validateTournamentInput() validateMatchParticipants()", 5.5, 10.4, 6.8),
+        ("MatchEventService", "processMatchEvent() getMatchRow() getMatchEvents()", 12.85, 10.4, 5.1),
+        ("TournamentService", "getTournamentMatches() getTournamentRankingRows()", 0.35, 7.8, 5.15),
+        ("ActuatorService", "updateActuators()", 14.35, 7.8, 2.25),
+        ("TournamentRules", "calculateTournamentRanking() isTournamentMatchCompatible()", 0.05, 5.4, 5.7),
+    ]
+    centers = {}
+    for title, body, x, y, w in modules:
+        class_box(c, x * cm, y * cm, w * cm, 1.05 * cm, title, body)
+        centers[title] = ((x + w / 2) * cm, (y + 0.52) * cm)
+    for a, b in [("ApiGateway","TournamentController"),("GameTypeController","ValidationRules"),("MatchController","ValidationRules"),("MatchController","MatchEventService"),("UserController","AuthController"),("DeviceController","AuthController"),("MatchEventService","TournamentService"),("MatchEventService","ActuatorService"),("TournamentController","TournamentService"),("TournamentService","TournamentRules")]:
+        arrow(c, *centers[a], *centers[b], color=GRAY)
+
+
+def page_5_micro(c):
+    box(c, 0.1 * cm, 8.0 * cm, 1.8 * cm, 0.8 * cm, "Browser")
+    box(c, 4.7 * cm, 8.0 * cm, 1.9 * cm, 0.8 * cm, "Gateway")
+    box(c, 11.5 * cm, 10.3 * cm, 2.6 * cm, 0.8 * cm, "Match Service")
+    box(c, 11.4 * cm, 7.4 * cm, 2.7 * cm, 0.8 * cm, "Catalog Service")
+    box(c, 11.2 * cm, 3.8 * cm, 3.2 * cm, 0.8 * cm, "Tournament Service")
+    box(c, 19.0 * cm, 4.3 * cm, 1.2 * cm, 1.0 * cm, "MySQL")
+    box(c, 18.8 * cm, 14.3 * cm, 2.0 * cm, 0.8 * cm, "Mosquitto")
+    box(c, 24.8 * cm, 7.3 * cm, 1.5 * cm, 0.8 * cm, "Edge")
+    notes = [("Match logic: punteggio,\nUUID, eventi", 3.75, 11.2), ("Catalog logic: ruoli,\nconfigurazione,\ninventario", 3.75, 5.5), ("Tournament logic:\ncalendario,\ncompatibilita, classifica", 3.75, 1.8), ("Edge logic: sensori,\ncoda offline, heartbeat", 18.2, 4.9)]
+    for txt, x, y in notes:
+        box(c, x * cm, y * cm, 3.8 * cm, 1.25 * cm, txt.replace("\n", " "))
+    arrow(c, 1.9 * cm, 8.4 * cm, 4.7 * cm, 8.4 * cm, "REST /api")
+    arrow(c, 6.6 * cm, 8.4 * cm, 11.5 * cm, 10.7 * cm, "matches")
+    arrow(c, 6.6 * cm, 8.1 * cm, 11.4 * cm, 7.8 * cm, "auth users locales games")
+    arrow(c, 6.6 * cm, 7.9 * cm, 11.2 * cm, 4.2 * cm, "teams tournaments statistics")
+    for target in [(19.0, 4.8), (19.0, 4.8), (19.0, 4.8)]:
+        pass
+    arrow(c, 14.1 * cm, 10.7 * cm, 19.0 * cm, 4.8 * cm)
+    arrow(c, 14.1 * cm, 7.8 * cm, 19.0 * cm, 4.8 * cm)
+    arrow(c, 14.4 * cm, 4.2 * cm, 19.0 * cm, 4.8 * cm)
+    arrow(c, 25.5 * cm, 8.1 * cm, 20.8 * cm, 14.7 * cm, "MQTT eventi sensori")
+    arrow(c, 18.8 * cm, 14.7 * cm, 14.1 * cm, 10.7 * cm, "MQTT comandi attuatori")
+
+
+def page_6_login(c):
+    xs = lifelines(c, ["Utente", "Browser", "API Gateway", "Catalog Service", "MySQL"])
+    y = 14.0 * cm
+    for src, dst, lab, dashed in [(0,1,"username e password",False),(1,2,"POST /api/auth/login",False),(2,3,"inoltra richiesta",False),(3,4,"SELECT user",False),(4,3,"utente e ruolo",True),(3,2,"JSON utente",True),(2,1,"risposta",True),(1,0,"dashboard del ruolo",True)]:
+        msg(c, xs, src, dst, y, lab, dashed)
+        y -= 1.0 * cm
+
+
+def page_7_match(c):
+    xs = lifelines(c, ["Admin locale", "Frontend", "Gateway", "Match Service", "Edge Service", "MQTT Broker", "MySQL"])
+    y = 14.6 * cm
+    for src, dst, lab, dashed in [(0,1,"Avvia partita",False),(1,2,"POST /api/matches/start",False),(2,3,"richiesta",False),(3,6,"INSERT match + UPDATE game",False),(3,1,"match LIVE",True),(0,1,"Simula MQTT",False),(1,2,"POST /matches/id/simulate-mqtt",False),(2,3,"richiesta",False),(3,4,"POST /simulate",False),(4,5,"publish evento QoS 1",False),(5,3,"evento MQTT",False),(3,6,"controllo UUID e UPDATE punteggio",False),(3,5,"comando attuatore",False),(5,4,"stato display/LED",False)]:
+        msg(c, xs, src, dst, y, lab, dashed)
         y -= 0.75 * cm
 
 
-def page_deployment(c):
-    header(c, "10. Deployment Docker", "11 / 11")
-    host_x, host_y, host_w, host_h = MARGIN, 2.0 * cm, PAGE_W - 2 * MARGIN, 12.4 * cm
-    c.setFillColor(colors.HexColor("#f7fafc"))
-    c.setStrokeColor(MID)
-    c.roundRect(host_x, host_y, host_w, host_h, 8, fill=1, stroke=1)
-    c.setFillColor(BLUE)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(host_x + 0.4 * cm, host_y + host_h - 0.6 * cm, "Computer studente - docker compose")
-    coords = {
-        "Frontend :8080": (2.2, 11.3, BLUE),
-        "API Gateway :3000": (9.5, 11.3, PURPLE),
-        "Edge Service :8090": (20.0, 11.3, ORANGE),
-        "Catalog :3001": (4.1, 7.4, GREEN),
-        "Match :3002": (10.4, 7.4, GREEN),
-        "Tournament :3003": (16.2, 7.4, GREEN),
-        "MySQL :3306": (7.4, 3.7, BLUE),
-        "Mosquitto :1883": (20.0, 3.7, PURPLE),
+def page_8_offline(c):
+    xs = lifelines(c, ["Sensore simulato", "Edge", "Broker", "Match Service", "MySQL"])
+    y = 14.4 * cm
+    msg(c, xs, 0, 1, y, "evento")
+    y -= 0.8 * cm
+    c.setStrokeColor(PURPLE)
+    c.setDash(2, 2)
+    c.rect(xs[1] - 2.8 * cm, y - 3.0 * cm, xs[2] - xs[1] + 3.1 * cm, 3.25 * cm, fill=0, stroke=1)
+    c.setDash()
+    c.setFillColor(BLACK)
+    c.setFont("Helvetica", 10)
+    c.drawString(xs[1] + 1.8 * cm, y, "[MQTT offline]")
+    c.drawString(xs[1] - 2.6 * cm, y - 1.1 * cm, "salva evento PENDING in JSON")
+    y -= 3.4 * cm
+    c.drawString(xs[1] + 1.8 * cm, y + 0.3 * cm, "[MQTT online]")
+    msg(c, xs, 1, 2, y, "publish evento")
+    y -= 1.0 * cm
+    msg(c, xs, 1, 2, y, "riconnessione")
+    y -= 1.0 * cm
+    c.drawString(xs[1] - 1.0 * cm, y + 0.2 * cm, "legge coda")
+    y -= 1.0 * cm
+    msg(c, xs, 1, 2, y, "ripubblica evento con stesso UUID")
+    y -= 1.0 * cm
+    msg(c, xs, 2, 3, y, "evento")
+    y -= 0.8 * cm
+    msg(c, xs, 3, 4, y, "verifica UUID")
+    y -= 0.6 * cm
+    msg(c, xs, 3, 4, y, "salva una sola volta")
+
+
+def page_9_tournament(c):
+    xs = lifelines(c, ["Admin piattaforma", "Frontend", "Tournament Service", "MySQL"])
+    y = 14.2 * cm
+    for src, dst, lab, dashed in [(0,1,"crea torneo con locali e modalita",False),(1,2,"POST /api/tournaments",False),(2,3,"INSERT tournament",False),(2,3,"INSERT tournament_locations",False),(2,3,"INSERT tournament_teams",False),(0,1,"collega partita e turno",False),(1,2,"POST /tournaments/id/matches",False),(2,3,"verifica tipo, modalita, locale e stato",False),(2,3,"INSERT tournament_matches",False),(2,3,"SELECT partite concluse",False),(2,1,"classifica calcolata",True)]:
+        msg(c, xs, src, dst, y, lab, dashed)
+        y -= 0.85 * cm
+
+
+def page_10_deployment(c):
+    box(c, 7.7 * cm, 14.2 * cm, 4.9 * cm, 0.9 * cm, "Computer studente")
+    nodes = {
+        "frontend :8080": (2.6, 11.8, 4.1, 0.9),
+        "api-gateway :3000": (7.75, 11.8, 4.8, 0.9),
+        "edge-service :8090": (21.3, 8.7, 4.9, 0.9),
+        "catalog-service :3001\ninterno": (0.2, 7.6, 5.9, 1.15),
+        "match-service :3002\ninterno": (7.2, 7.6, 5.9, 1.15),
+        "tournament-service\n:3003 interno": (14.25, 7.6, 5.9, 1.15),
+        "mysql :3306": (8.4, 3.9, 2.6, 1.0),
+        "mosquitto :1883": (20.8, 3.8, 4.2, 0.9),
     }
-    pos = {}
-    for name, (xcm, ycm, col) in coords.items():
-        x, y = xcm * cm, ycm * cm
-        pos[name] = (x, y)
-        box(c, x, y, 5.0 * cm, 1.15 * cm, name, fill=colors.white, stroke=col, title_color=col, size=8.5)
-    arrow(c, pos["Frontend :8080"][0] + 5 * cm, pos["Frontend :8080"][1] + 0.6 * cm, pos["API Gateway :3000"][0], pos["API Gateway :3000"][1] + 0.6 * cm, "REST")
-    for service in ["Catalog :3001", "Match :3002", "Tournament :3003"]:
-        arrow(c, pos["API Gateway :3000"][0] + 2.5 * cm, pos["API Gateway :3000"][1], pos[service][0] + 2.5 * cm, pos[service][1] + 1.15 * cm)
-        arrow(c, pos[service][0] + 2.5 * cm, pos[service][1], pos["MySQL :3306"][0] + 2.5 * cm, pos["MySQL :3306"][1] + 1.15 * cm, "SQL")
-    arrow(c, pos["Edge Service :8090"][0] + 2.5 * cm, pos["Edge Service :8090"][1], pos["Mosquitto :1883"][0] + 2.5 * cm, pos["Mosquitto :1883"][1] + 1.15 * cm, "MQTT")
-    arrow(c, pos["Match :3002"][0] + 5 * cm, pos["Match :3002"][1] + 0.55 * cm, pos["Mosquitto :1883"][0], pos["Mosquitto :1883"][1] + 1.0 * cm, "sub/pub")
+    centers = {}
+    for name, (x, y, w, h) in nodes.items():
+        box(c, x * cm, y * cm, w * cm, h * cm, name.replace("\n", " "), 10)
+        centers[name] = ((x + w / 2) * cm, (y + h / 2) * cm)
+    for n in ["frontend :8080", "api-gateway :3000", "edge-service :8090"]:
+        arrow(c, 10.1 * cm, 14.2 * cm, *centers[n])
+    for n in ["catalog-service :3001\ninterno", "match-service :3002\ninterno", "tournament-service\n:3003 interno"]:
+        arrow(c, *centers["api-gateway :3000"], *centers[n])
+        arrow(c, *centers[n], *centers["mysql :3306"])
+    arrow(c, *centers["edge-service :8090"], *centers["mosquitto :1883"])
+    arrow(c, *centers["match-service :3002\ninterno"], *centers["mosquitto :1883"])
+
+
+def page_11_summary(c):
+    page_header(c, "Legenda per la discussione orale")
+    rows = [
+        ("REST", "browser e gateway usano richieste/risposte per gestire dati"),
+        ("MQTT", "edge e match service scambiano eventi e comandi tramite broker"),
+        ("Edge", "simula sensori, conserva coda JSON offline, sincronizza al ritorno online"),
+        ("UUID", "impedisce di contare due volte lo stesso evento con QoS 1"),
+        ("Microservizi", "catalogo, partite e tornei hanno responsabilita separate"),
+        ("Limite didattico", "database condiviso e autenticazione semplificata dopo login"),
+    ]
+    y = 13.5 * cm
+    for k, v in rows:
+        box(c, 4.0 * cm, y, 4.0 * cm, 0.8 * cm, k, 10)
+        box(c, 9.0 * cm, y, 12.5 * cm, 0.8 * cm, v, 9)
+        y -= 1.25 * cm
+
+
+PAGES = [
+    ("Architettura package", page_1_architecture),
+    ("Casi d'uso", page_2_use_cases),
+    ("Dominio dati", page_3_domain),
+    ("Moduli implementativi", page_4_modules),
+    ("Microservizi e flussi", page_5_micro),
+    ("Sequenza login", page_6_login),
+    ("Sequenza partita MQTT", page_7_match),
+    ("Sequenza offline", page_8_offline),
+    ("Sequenza torneo", page_9_tournament),
+    ("Deployment Docker", page_10_deployment),
+    ("Sintesi orale", page_11_summary),
+]
 
 
 def main():
-    OUT.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(OUT), pagesize=landscape(A4))
-    page_index(c)
-    c.showPage()
-    page_use_cases(c)
-    c.showPage()
-    page_domain(c)
-    c.showPage()
-    page_packages(c)
-    c.showPage()
-    page_modules(c)
-    c.showPage()
-    page_microservices(c)
-    c.showPage()
-    sequence_page(
-        c,
-        "6. Sequenza login",
-        "7 / 11",
-        ["Utente", "Browser", "Gateway", "Catalog", "MySQL"],
-        [
-            (0, 1, "username/password", BLUE),
-            (1, 2, "POST /api/auth/login", BLUE),
-            (2, 3, "forward", PURPLE),
-            (3, 4, "SELECT user", GREEN),
-            (4, 3, "utente + ruolo", GREEN),
-            (3, 2, "JSON user", PURPLE),
-            (2, 1, "response", BLUE),
-            (1, 0, "dashboard ruolo", BLUE),
-        ],
-    )
-    c.showPage()
-    sequence_page(
-        c,
-        "7. Sequenza partita MQTT",
-        "8 / 11",
-        ["Admin locale", "Frontend", "Gateway", "Match", "Edge", "Broker", "MySQL"],
-        [
-            (0, 1, "avvia partita", BLUE),
-            (1, 2, "POST /matches/start", BLUE),
-            (2, 3, "forward", PURPLE),
-            (3, 6, "INSERT match", GREEN),
-            (3, 4, "POST /simulate", ORANGE),
-            (4, 5, "publish evento QoS 1", ORANGE),
-            (5, 3, "evento MQTT", PURPLE),
-            (3, 6, "UUID + update score", GREEN),
-            (3, 5, "comando attuatore", PURPLE),
-            (5, 4, "display/LED", ORANGE),
-        ],
-    )
-    c.showPage()
-    sequence_page(
-        c,
-        "8. Sequenza offline e sincronizzazione",
-        "9 / 11",
-        ["Sensore", "Edge", "Coda JSON", "Broker", "Match", "MySQL"],
-        [
-            (0, 1, "evento locale", BLUE),
-            (1, 2, "salva PENDING", ORANGE),
-            (1, 3, "riconnessione", PURPLE),
-            (2, 1, "legge coda", ORANGE),
-            (1, 3, "ripubblica stesso UUID", PURPLE),
-            (3, 4, "evento MQTT", PURPLE),
-            (4, 5, "verifica UUID", GREEN),
-            (4, 5, "salva una sola volta", GREEN),
-            (1, 2, "svuota coda", ORANGE),
-        ],
-    )
-    c.showPage()
-    sequence_page(
-        c,
-        "9. Sequenza torneo",
-        "10 / 11",
-        ["Admin piattaforma", "Frontend", "Tournament", "MySQL", "Ranking"],
-        [
-            (0, 1, "crea torneo", BLUE),
-            (1, 2, "POST /api/tournaments", BLUE),
-            (2, 3, "INSERT tournament", GREEN),
-            (2, 3, "INSERT locations/teams", GREEN),
-            (0, 1, "collega partita", BLUE),
-            (1, 2, "POST /tournaments/id/matches", BLUE),
-            (2, 3, "verifica compatibilita", GREEN),
-            (2, 3, "INSERT tournament_matches", GREEN),
-            (2, 4, "calcola classifica", PURPLE),
-            (4, 1, "punti e ranking", PURPLE),
-        ],
-    )
-    c.showPage()
-    page_deployment(c)
+    for title, fn in PAGES:
+        page_header(c, title)
+        fn(c)
+        c.showPage()
     c.save()
     print(OUT)
 
